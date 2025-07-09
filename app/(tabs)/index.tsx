@@ -1,7 +1,12 @@
 import { View, StyleSheet, ImageSourcePropType } from "react-native";
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import * as MediaLibrary from 'expo-media-library';
+import { captureRef } from "react-native-view-shot";
+
+import { Platform } from "react-native";
+import html2canvas from "html2canvas";
 
 import ImageViewer from '@/components/ImageViewer';
 import Button from "@/components/Button";
@@ -18,6 +23,21 @@ export default function Index() {
   const [showAppOptions, setShowAppOptions] = useState<boolean>(false);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [pickedEmoji, setPickedEmoji] = useState<ImageSourcePropType | undefined>(undefined);
+  const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
+  const imageRef = useRef<View>(null);
+
+  useEffect(() => {
+    if (!permissionResponse?.granted) {
+      requestPermission();
+    }
+  }, []);
+  // if(permissionResponse === null) {
+  //   requestPermission();
+  // }
+
+  // if (status === null) {
+//   requestPermission();
+// }
 
   const pickImageAsync = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -47,14 +67,46 @@ export default function Index() {
   const onModalClose = () => {
     setIsModalVisible(false);
   };
-  
+
   const onSaveImageAsync = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        // @ts-ignore
+        const element = imageRef.current?.containerRef?.current || imageRef.current;
+        if (!element) return;
+
+        const canvas = await html2canvas(element as HTMLElement);
+        const dataUrl = canvas.toDataURL('image/png');
+
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = 'sticker-smash-screenshot.png';
+        link.click();
+        alert('Image Saved!');
+      }else{
+      const localUri = await captureRef(imageRef, {
+        height: 440,
+        quality: 1,
+      });
+
+      await MediaLibrary.saveToLibraryAsync(localUri);
+      if (localUri) {
+        alert('Screenshot Saved!');
+      }
+    }
+    } catch (e) {
+      console.log(e);
+      alert('Failed to save the image. Please try again.');
+    }
 
   };
+
+  // const [status, requestPermission] = MediaLibrary.usePermissions();
 
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.imageContainer}>
+        <View ref={imageRef} collapsable={false}>
         <ImageViewer imgSource={selectedImage || PlaceholderImage} />
         {pickedEmoji && (
           <EmojiSticker
@@ -62,6 +114,7 @@ export default function Index() {
             stickerSource={pickedEmoji}
           />
         )}
+        </View>
       </View>
       {showAppOptions ? (
         <View style={styles.optionsContainer}>
@@ -83,6 +136,8 @@ export default function Index() {
     </GestureHandlerRootView>
   );
 }
+
+
 
 
 const styles = StyleSheet.create({
